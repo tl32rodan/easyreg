@@ -219,5 +219,74 @@ class TestComparisonWithDiffRules(_ComparatorTestBase):
         self.assertFalse(result.match)
 
 
+class TestSortLinesComparison(_ComparatorTestBase):
+    """Integration tests for sort_lines diff rule in directory comparison."""
+
+    def setUp(self):
+        try:
+            from regressionx.comparator.diff_rules import apply_sort_lines
+            if apply_sort_lines is None:
+                raise ImportError
+        except ImportError:
+            raise unittest.SkipTest("sort_lines not yet implemented")
+        super().setUp()
+
+    def test_unordered_output_matches_with_sort_rule(self):
+        rules = [DiffRule(type="sort_lines", pattern="")]
+        self._create(self.golden, "f.txt", "apple\nbanana\ncherry\n")
+        self._create(self.output, "f.txt", "cherry\napple\nbanana\n")
+
+        result = compare_directories(self.golden, self.output, diff_rules=rules)
+        self.assertTrue(result.match)
+
+    def test_different_content_fails_even_with_sort(self):
+        rules = [DiffRule(type="sort_lines", pattern="")]
+        self._create(self.golden, "f.txt", "apple\nbanana\n")
+        self._create(self.output, "f.txt", "apple\norange\n")
+
+        result = compare_directories(self.golden, self.output, diff_rules=rules)
+        self.assertFalse(result.match)
+
+    def test_sort_combined_with_ignore_line(self):
+        rules = [
+            DiffRule(type="ignore_line", pattern="^#"),
+            DiffRule(type="sort_lines", pattern=""),
+        ]
+        self._create(self.golden, "f.txt", "# comment\nbanana\napple\n")
+        self._create(self.output, "f.txt", "apple\nbanana\n# another comment\n")
+
+        result = compare_directories(self.golden, self.output, diff_rules=rules)
+        self.assertTrue(result.match)
+
+
+class TestToleranceComparison(_ComparatorTestBase):
+    """Integration tests for tolerance diff rule in directory comparison."""
+
+    def setUp(self):
+        try:
+            from regressionx.comparator.diff_rules import lines_within_tolerance
+            if lines_within_tolerance is None:
+                raise ImportError
+        except ImportError:
+            raise unittest.SkipTest("tolerance not yet implemented")
+        super().setUp()
+
+    def test_numeric_values_within_tolerance_match(self):
+        rules = [DiffRule(type="tolerance", pattern=r"\d+\.\d+", replace="0.01")]
+        self._create(self.golden, "f.txt", "value: 1.000\nresult: 2.000\n")
+        self._create(self.output, "f.txt", "value: 1.001\nresult: 2.001\n")
+
+        result = compare_directories(self.golden, self.output, diff_rules=rules)
+        self.assertTrue(result.match)
+
+    def test_numeric_values_outside_tolerance_fail(self):
+        rules = [DiffRule(type="tolerance", pattern=r"\d+\.\d+", replace="0.001")]
+        self._create(self.golden, "f.txt", "value: 1.000\n")
+        self._create(self.output, "f.txt", "value: 1.500\n")
+
+        result = compare_directories(self.golden, self.output, diff_rules=rules)
+        self.assertFalse(result.match)
+
+
 if __name__ == "__main__":
     unittest.main()

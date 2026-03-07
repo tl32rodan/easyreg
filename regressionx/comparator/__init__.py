@@ -4,7 +4,12 @@ from pathlib import Path
 from typing import List, Optional
 
 from ..model import DiffRule
-from .diff_rules import apply_line_rules, should_ignore_file, should_ignore_folder
+from .diff_rules import (
+    apply_line_rules,
+    lines_within_tolerance,
+    should_ignore_file,
+    should_ignore_folder,
+)
 
 
 @dataclass
@@ -21,42 +26,30 @@ def compare_directories(
     diff_rules: Optional[List[DiffRule]] = None,
     _prefix: str = "",
 ) -> ComparisonResult:
-    """Recursively compare two directories, applying diff rules.
-
-    Args:
-        golden: Path to the golden (expected) directory.
-        output: Path to the output (actual) directory.
-        diff_rules: Optional list of DiffRule to apply.
-        _prefix: Internal, for tracking relative paths in recursion.
-    """
+    """Recursively compare two directories, applying diff rules."""
     golden = Path(golden)
     output = Path(output)
     rules = diff_rules or []
     errors = []
     diffs = []
 
-    # Collect entries from both sides
     golden_entries = {e.name: e for e in sorted(golden.iterdir())} if golden.exists() else {}
     output_entries = {e.name: e for e in sorted(output.iterdir())} if output.exists() else {}
 
     all_names = sorted(set(golden_entries) | set(output_entries))
 
     for name in all_names:
-        rel_path = f"{_prefix}{name}" if not _prefix else f"{_prefix}/{name}"
-        if not _prefix:
-            rel_path = name
+        rel_path = name if not _prefix else f"{_prefix}/{name}"
 
         g_entry = golden_entries.get(name)
         o_entry = output_entries.get(name)
 
-        # Check if this is a directory on either side
         g_is_dir = g_entry is not None and g_entry.is_dir()
         o_is_dir = o_entry is not None and o_entry.is_dir()
 
         if g_is_dir or o_is_dir:
             if should_ignore_folder(name, rules):
                 continue
-            # Recurse into subdirectories
             sub_golden = golden / name
             sub_output = output / name
             if g_entry is None:
@@ -73,7 +66,6 @@ def compare_directories(
             diffs.extend(sub_result.diffs)
             continue
 
-        # File handling
         if should_ignore_file(name, rules):
             continue
 
@@ -84,7 +76,6 @@ def compare_directories(
             errors.append(f"Only in golden: {rel_path}")
             continue
 
-        # Compare file content
         if not _compare_file_content(g_entry, o_entry, rules):
             diffs.append(f"Content mismatch: {rel_path}")
 
@@ -96,22 +87,34 @@ def _compare_file_content(
     golden_file: Path, output_file: Path, rules: List[DiffRule]
 ) -> bool:
     """Compare two files, applying line-level diff rules."""
-    # Check if we have any line-level rules
-    line_rules = [r for r in rules if r.type in ("ignore_line", "ignore_regex")]
+    # Determine which rule types are active
+    text_rule_types = {"ignore_line", "ignore_regex", "sort_lines"}
+    has_text_rules = any(r.type in text_rule_types for r in rules)
+    tolerance_rules = [r for r in rules if r.type == "tolerance"]
 
-    if not line_rules:
+    if not has_text_rules and not tolerance_rules:
         # Fast path: binary comparison
         return golden_file.read_bytes() == output_file.read_bytes()
 
-    # Text comparison with rules
     try:
         golden_lines = golden_file.read_text(encoding="utf-8").splitlines()
         output_lines = output_file.read_text(encoding="utf-8").splitlines()
     except UnicodeDecodeError:
-        # Binary file, fall back to byte comparison
         return golden_file.read_bytes() == output_file.read_bytes()
 
-    golden_filtered = apply_line_rules(golden_lines, line_rules)
-    output_filtered = apply_line_rules(output_lines, line_rules)
+    # Apply text transformation rules
+    if has_text_rules:
+        text_rules = [r for r in rules if r.type in text_rule_types]
+        golden_lines = apply_line_rules(golden_lines, text_rules)
+        output_lines = apply_line_rules(output_lines, text_rules)
 
-    return golden_filtered == output_filtered
+    # Apply tolerance if requested
+    if tolerance_rules:
+        tol_rule = tolerance_rules[-1]  # last tolerance rule wins
+        try:
+            tol = float(tol_rule.replace) if tol_rule.replace else 0.0
+        except (ValueError, TypeError):
+            tol = 0.0
+        return lines_within_tolerance(golden_lines, output_lines, tol)
+
+    return golden_lines == output_lines

@@ -1,13 +1,16 @@
 """CLI entry point for RegressionX."""
 import argparse
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import List
 
 from .config import load_config
 from .comparator import compare_directories
 from .comparator.diff_rules import resolve_effective_rules
 from .golden import GoldenManager
-from .model import CaseResult, RunResult, Verdict
+from .model import Case, CaseResult, Suite, Verdict
+from .reporter.json_reporter import JsonReporter
 from .reporter.markdown import MarkdownReporter
 from .runner.subprocess_runner import SubprocessRunner
 
@@ -21,12 +24,18 @@ def _build_parser():
     run_p.add_argument("--config", required=True)
     run_p.add_argument("--case", default=None, help="Run only this case")
     run_p.add_argument("--report", default="regression_report.md")
+    run_p.add_argument("--report-format", dest="report_format",
+                       choices=["md", "json"], default="md")
+    run_p.add_argument("--parallel", type=int, default=1, metavar="N",
+                       help="Number of parallel workers (default: 1)")
 
     # compare
     cmp_p = subparsers.add_parser("compare", help="Compare existing outputs with golden")
     cmp_p.add_argument("--config", required=True)
     cmp_p.add_argument("--case", default=None)
     cmp_p.add_argument("--report", default="regression_report.md")
+    cmp_p.add_argument("--report-format", dest="report_format",
+                       choices=["md", "json"], default="md")
 
     # promote
     pro_p = subparsers.add_parser("promote", help="Promote output to golden")
@@ -42,11 +51,68 @@ def _build_parser():
 
 
 def _resolve_path(template: str, **kwargs) -> Path:
-    """Expand placeholders in a path template."""
     result = template
     for key, val in kwargs.items():
         result = result.replace(f"{{{key}}}", str(val))
     return Path(result)
+
+
+def _make_reporter(report_path: str, fmt: str):
+    if fmt == "json":
+        return JsonReporter(report_path)
+    return MarkdownReporter(report_path)
+
+
+def _run_single_case(case: Case, suite: Suite, runner: SubprocessRunner) -> CaseResult:
+    """Execute and compare a single case. Thread-safe."""
+    output_dir = _resolve_path(suite.output_dir, case=case.name, run_id="latest")
+    golden_dir = _resolve_path(suite.golden_dir, case=case.name)
+    env = dict(suite.env) if suite.env else None
+
+    run_result = runner.run(case, output_dir, env=env)
+
+    if run_result.returncode != 0:
+        return CaseResult(
+            case_name=case.name,
+            verdict=Verdict.ERROR,
+            errors=[f"Command exited with code {run_result.returncode}"],
+            run_result=run_result,
+        )
+
+    if not golden_dir.is_dir():
+        return CaseResult(case_name=case.name, verdict=Verdict.NEW)
+
+    effective_rules = resolve_effective_rules(
+        suite.diff_rules, case.diff_rules, case.diff_rules_mode,
+    )
+    cmp = compare_directories(golden_dir, output_dir, diff_rules=effective_rules)
+
+    if cmp.match:
+        return CaseResult(case_name=case.name, verdict=Verdict.PASS)
+    return CaseResult(
+        case_name=case.name, verdict=Verdict.FAIL,
+        diffs=cmp.diffs, errors=cmp.errors,
+    )
+
+
+def _execute_cases(cases: List[Case], suite: Suite, parallel: int) -> List[CaseResult]:
+    """Execute cases sequentially or in parallel."""
+    runner = SubprocessRunner()
+
+    if parallel <= 1:
+        return [_run_single_case(case, suite, runner) for case in cases]
+
+    # Parallel execution — preserve original case order in results
+    results: List[CaseResult] = [None] * len(cases)  # type: ignore
+    with ThreadPoolExecutor(max_workers=parallel) as executor:
+        future_to_idx = {
+            executor.submit(_run_single_case, case, suite, runner): idx
+            for idx, case in enumerate(cases)
+        }
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            results[idx] = future.result()
+    return results
 
 
 def _cmd_run(args):
@@ -55,58 +121,13 @@ def _cmd_run(args):
     if args.case:
         cases = [c for c in cases if c.name == args.case]
 
-    runner = SubprocessRunner()
-    golden_mgr = GoldenManager(Path(suite.golden_dir).parent
-                                if "{case}" in suite.golden_dir
-                                else Path(suite.golden_dir))
+    parallel = getattr(args, "parallel", 1)
+    results = _execute_cases(cases, suite, parallel)
 
-    results = []
-    for case in cases:
-        output_dir = _resolve_path(suite.output_dir, case=case.name, run_id="latest")
-        golden_dir = _resolve_path(suite.golden_dir, case=case.name)
-
-        # Build env
-        env = dict(suite.env) if suite.env else None
-
-        # Execute
-        run_result = runner.run(case, output_dir, env=env)
-
-        if run_result.returncode != 0:
-            results.append(CaseResult(
-                case_name=case.name,
-                verdict=Verdict.ERROR,
-                errors=[f"Command exited with code {run_result.returncode}"],
-                run_result=run_result,
-            ))
-            continue
-
-        # Check golden
-        if not golden_dir.is_dir():
-            results.append(CaseResult(
-                case_name=case.name, verdict=Verdict.NEW,
-            ))
-            continue
-
-        # Compare
-        effective_rules = resolve_effective_rules(
-            suite.diff_rules, case.diff_rules, case.diff_rules_mode,
-        )
-        cmp = compare_directories(golden_dir, output_dir, diff_rules=effective_rules)
-
-        if cmp.match:
-            results.append(CaseResult(case_name=case.name, verdict=Verdict.PASS))
-        else:
-            results.append(CaseResult(
-                case_name=case.name, verdict=Verdict.FAIL,
-                diffs=cmp.diffs, errors=cmp.errors,
-            ))
-
-    # Report
-    reporter = MarkdownReporter(args.report)
+    reporter = _make_reporter(args.report, getattr(args, "report_format", "md"))
     reporter.generate(results)
 
-    has_failures = any(r.verdict == Verdict.FAIL or r.verdict == Verdict.ERROR
-                       for r in results)
+    has_failures = any(r.verdict in (Verdict.FAIL, Verdict.ERROR) for r in results)
     return 1 if has_failures else 0
 
 
@@ -138,7 +159,7 @@ def _cmd_compare(args):
                 diffs=cmp.diffs, errors=cmp.errors,
             ))
 
-    reporter = MarkdownReporter(args.report)
+    reporter = _make_reporter(args.report, getattr(args, "report_format", "md"))
     reporter.generate(results)
 
     has_failures = any(r.verdict == Verdict.FAIL for r in results)
@@ -151,7 +172,6 @@ def _cmd_promote(args):
     if args.case:
         cases = [c for c in cases if c.name == args.case]
 
-    # Determine golden root
     if "{case}" in suite.golden_dir:
         golden_root = Path(suite.golden_dir.split("{case}")[0].rstrip("/"))
     else:

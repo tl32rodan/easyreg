@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 
 VALID_DIFF_RULE_TYPES = frozenset([
     "ignore_line", "ignore_regex", "ignore_file", "ignore_folder",
+    "sort_lines", "tolerance",
 ])
 
 

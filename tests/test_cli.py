@@ -238,5 +238,149 @@ class TestNewVerdictFlow(_CLITestBase):
         self.assertEqual(exit_code, 0)
 
 
+class TestParallelRun(_CLITestBase):
+    """Tests for --parallel N flag on the run command."""
+
+    @patch("regressionx.cli.SubprocessRunner")
+    @patch("regressionx.cli.compare_directories")
+    def test_parallel_flag_accepted(self, mock_compare, mock_runner_cls):
+        """--parallel N should not cause an error."""
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
+        mock_runner_cls.return_value = mock_runner
+        mock_compare.return_value = MagicMock(match=True, errors=[], diffs=[])
+
+        config = self._minimal_config()
+        config["cases"].append(
+            {"name": "case_b", "command": "echo b", "input": "/dev/null"}
+        )
+        config_path = self._write_config(config)
+
+        golden_a = self.root / "golden" / "case_a"
+        golden_a.mkdir(parents=True)
+        (golden_a / "result.txt").write_text("data")
+        golden_b = self.root / "golden" / "case_b"
+        golden_b.mkdir(parents=True)
+        (golden_b / "result.txt").write_text("data")
+
+        exit_code = cli.main(["run", "--config", config_path, "--parallel", "2"])
+        self.assertEqual(exit_code, 0)
+
+    @patch("regressionx.cli.SubprocessRunner")
+    @patch("regressionx.cli.compare_directories")
+    def test_parallel_all_cases_executed(self, mock_compare, mock_runner_cls):
+        """All cases should be executed even with --parallel."""
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
+        mock_runner_cls.return_value = mock_runner
+        mock_compare.return_value = MagicMock(match=True, errors=[], diffs=[])
+
+        config = self._minimal_config()
+        config["cases"].append(
+            {"name": "case_b", "command": "echo b", "input": "/dev/null"}
+        )
+        config_path = self._write_config(config)
+
+        golden_a = self.root / "golden" / "case_a"
+        golden_a.mkdir(parents=True)
+        (golden_a / "result.txt").write_text("data")
+        golden_b = self.root / "golden" / "case_b"
+        golden_b.mkdir(parents=True)
+        (golden_b / "result.txt").write_text("data")
+
+        cli.main(["run", "--config", config_path, "--parallel", "2"])
+
+        self.assertEqual(mock_runner.run.call_count, 2)
+
+    @patch("regressionx.cli.SubprocessRunner")
+    @patch("regressionx.cli.compare_directories")
+    def test_parallel_1_same_as_sequential(self, mock_compare, mock_runner_cls):
+        """--parallel 1 should behave like sequential execution."""
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
+        mock_runner_cls.return_value = mock_runner
+        mock_compare.return_value = MagicMock(match=True, errors=[], diffs=[])
+
+        config_path = self._write_config(self._minimal_config())
+        golden_a = self.root / "golden" / "case_a"
+        golden_a.mkdir(parents=True)
+        (golden_a / "result.txt").write_text("data")
+
+        exit_code = cli.main(["run", "--config", config_path, "--parallel", "1"])
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(mock_runner.run.call_count, 1)
+
+    @patch("regressionx.cli.SubprocessRunner")
+    @patch("regressionx.cli.compare_directories")
+    def test_parallel_failure_propagates(self, mock_compare, mock_runner_cls):
+        """A failing case under --parallel should still return exit code 1."""
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
+        mock_runner_cls.return_value = mock_runner
+        mock_compare.return_value = MagicMock(
+            match=False, errors=[], diffs=["mismatch"]
+        )
+
+        config_path = self._write_config(self._minimal_config())
+        golden_a = self.root / "golden" / "case_a"
+        golden_a.mkdir(parents=True)
+        (golden_a / "result.txt").write_text("data")
+
+        exit_code = cli.main(["run", "--config", config_path, "--parallel", "2"])
+        self.assertEqual(exit_code, 1)
+
+
+class TestJsonReport(_CLITestBase):
+    """Tests for --report-format json flag."""
+
+    @patch("regressionx.cli.SubprocessRunner")
+    @patch("regressionx.cli.compare_directories")
+    def test_json_format_flag_accepted(self, mock_compare, mock_runner_cls):
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
+        mock_runner_cls.return_value = mock_runner
+        mock_compare.return_value = MagicMock(match=True, errors=[], diffs=[])
+
+        config_path = self._write_config(self._minimal_config())
+        golden_a = self.root / "golden" / "case_a"
+        golden_a.mkdir(parents=True)
+        (golden_a / "result.txt").write_text("data")
+
+        report_path = str(self.root / "report.json")
+        exit_code = cli.main([
+            "run", "--config", config_path,
+            "--report", report_path,
+            "--report-format", "json",
+        ])
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(os.path.exists(report_path))
+
+    @patch("regressionx.cli.SubprocessRunner")
+    @patch("regressionx.cli.compare_directories")
+    def test_json_report_is_valid_json(self, mock_compare, mock_runner_cls):
+        import json as _json
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
+        mock_runner_cls.return_value = mock_runner
+        mock_compare.return_value = MagicMock(match=True, errors=[], diffs=[])
+
+        config_path = self._write_config(self._minimal_config())
+        golden_a = self.root / "golden" / "case_a"
+        golden_a.mkdir(parents=True)
+        (golden_a / "result.txt").write_text("data")
+
+        report_path = str(self.root / "report.json")
+        cli.main([
+            "run", "--config", config_path,
+            "--report", report_path,
+            "--report-format", "json",
+        ])
+
+        with open(report_path, encoding="utf-8") as f:
+            data = _json.load(f)
+        self.assertIn("summary", data)
+        self.assertIn("cases", data)
+
+
 if __name__ == "__main__":
     unittest.main()
