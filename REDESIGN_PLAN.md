@@ -117,6 +117,7 @@ Legacy 程式碼持續累積，因為沒有人敢動「能跑的東西」。
       "command": "run_flow.sh {input} {output_dir}",
       "input": "/data/inputs/case_a",
       "timeout": 3600,
+      "diff_rules_mode": "append",
       "diff_rules": [
         {"type": "ignore_line", "pattern": "^DEBUG:"}
       ]
@@ -132,7 +133,8 @@ Legacy 程式碼持續累積，因為沒有人敢動「能跑的東西」。
 
 **設計要點：**
 - `{case}`, `{run_id}`, `{version}`, `{input}`, `{output_dir}` 為內建 placeholder
-- `diff_rules` 支援全域和 per-case，per-case 可覆寫或追加
+- `diff_rules` 支援全域和 per-case
+- `diff_rules_mode`：預設 `"append"`（case 規則追加在全域之後），可設為 `"override"`（case 規則完全取代全域規則）
 - `versions` 讓同一套 case 跑不同版本，實現 A/B 比較
 - 如果只有一個版本，就跟 golden 比對
 

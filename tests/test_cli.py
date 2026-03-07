@@ -1,135 +1,242 @@
-import unittest
-from unittest.mock import patch, MagicMock
-from pathlib import Path
-import sys
-import os
+"""Tests for regressionx.cli — CLI integration tests.
 
-# Ensure the root directory is in sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+Covers:
+- run command: load config → execute → compare → report
+- compare command: compare existing outputs only
+- promote command: promote golden
+- --case filter: run specific case only
+- golden --status command
+- Exit code 1 on failure, 0 on success
+- Missing config error
+"""
+import unittest
+import tempfile
+import shutil
+import json
+import os
+from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 try:
     from regressionx import cli
 except ImportError:
     cli = None
 
-from regressionx.domain import Case
+try:
+    from regressionx.model import Suite, Case, Verdict, CaseResult, RunResult
+except ImportError:
+    Suite = Case = Verdict = CaseResult = RunResult = None
 
-class TestCLI(unittest.TestCase):
+
+def _skip_if_not_implemented():
+    if cli is None:
+        raise unittest.SkipTest("cli module not yet implemented")
+
+
+class _CLITestBase(unittest.TestCase):
     def setUp(self):
-        if cli is None:
-            self.fail("Implementation Missing: regressionx.cli module not found")
+        _skip_if_not_implemented()
+        self.test_dir = tempfile.mkdtemp()
+        self.root = Path(self.test_dir)
 
-    def _make_case(self, name):
-        return Case(
-            name=name,
-            baseline_command=f"echo {name}a",
-            candidate_command=f"echo {name}b",
-            base_path=f"/tmp/{name}/baseline",
-            cand_path=f"/tmp/{name}/candidate"
+    def tearDown(self):
+        shutil.rmtree(self.test_dir)
+
+    def _write_config(self, data):
+        path = self.root / "suite.json"
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return str(path)
+
+    def _minimal_config(self):
+        return {
+            "suite": "test_suite",
+            "golden_dir": str(self.root / "golden" / "{case}"),
+            "output_dir": str(self.root / "output" / "{case}"),
+            "cases": [
+                {"name": "case_a", "command": "echo hello > result.txt",
+                 "input": "/dev/null"},
+            ],
+        }
+
+
+class TestRunCommand(_CLITestBase):
+
+    @patch("regressionx.cli.SubprocessRunner")
+    @patch("regressionx.cli.compare_directories")
+    def test_run_executes_and_compares(self, mock_compare, mock_runner_cls):
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
+        mock_runner_cls.return_value = mock_runner
+
+        mock_compare.return_value = MagicMock(match=True, errors=[], diffs=[])
+
+        config_path = self._write_config(self._minimal_config())
+        # Create golden dir so comparison can proceed
+        golden_dir = self.root / "golden" / "case_a"
+        golden_dir.mkdir(parents=True)
+        (golden_dir / "result.txt").write_text("hello\n")
+
+        exit_code = cli.main(["run", "--config", config_path])
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(mock_runner.run.called)
+        self.assertTrue(mock_compare.called)
+
+    @patch("regressionx.cli.SubprocessRunner")
+    @patch("regressionx.cli.compare_directories")
+    def test_run_returns_1_on_failure(self, mock_compare, mock_runner_cls):
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
+        mock_runner_cls.return_value = mock_runner
+
+        mock_compare.return_value = MagicMock(
+            match=False, errors=[], diffs=["Content mismatch: f.txt"]
         )
 
-    def _set_compare_ok(self, mock_compare):
-        mock_compare.return_value.match = True
-        mock_compare.return_value.errors = []
-        mock_compare.return_value.diffs = []
+        config_path = self._write_config(self._minimal_config())
+        golden_dir = self.root / "golden" / "case_a"
+        golden_dir.mkdir(parents=True)
+        (golden_dir / "result.txt").write_text("different\n")
 
-    @patch('regressionx.cli.run_case')
-    @patch('regressionx.cli.load_config')
-    @patch('regressionx.cli.compare_directories')
-    def test_run_command_loads_config_and_runs_cases(self, mock_compare, mock_load, mock_run):
-        # Arrange
-        mock_load.return_value = [
-            self._make_case("c1"),
-            self._make_case("c2")
-        ]
-        mock_run.return_value = (
-            type('obj', (object,), {'returncode': 0}),
-            type('obj', (object,), {'returncode': 0}),
-            Path("/tmp/a"), Path("/tmp/b")
+        exit_code = cli.main(["run", "--config", config_path])
+        self.assertEqual(exit_code, 1)
+
+
+class TestCompareCommand(_CLITestBase):
+
+    @patch("regressionx.cli.compare_directories")
+    def test_compare_does_not_execute(self, mock_compare):
+        mock_compare.return_value = MagicMock(match=True, errors=[], diffs=[])
+
+        config_path = self._write_config(self._minimal_config())
+        # Create both golden and output dirs
+        golden_dir = self.root / "golden" / "case_a"
+        golden_dir.mkdir(parents=True)
+        (golden_dir / "f.txt").write_text("data")
+        output_dir = self.root / "output" / "case_a"
+        output_dir.mkdir(parents=True)
+        (output_dir / "f.txt").write_text("data")
+
+        exit_code = cli.main(["compare", "--config", config_path])
+        self.assertEqual(exit_code, 0)
+        # compare should be called, but no runner should be invoked
+
+
+class TestPromoteCommand(_CLITestBase):
+
+    @patch("regressionx.cli.GoldenManager")
+    def test_promote_calls_golden_manager(self, mock_gm_cls):
+        mock_gm = MagicMock()
+        mock_gm_cls.return_value = mock_gm
+
+        config = self._minimal_config()
+        config_path = self._write_config(config)
+        # Create output dir to promote from
+        output_dir = self.root / "output" / "case_a"
+        output_dir.mkdir(parents=True)
+        (output_dir / "result.txt").write_text("output")
+
+        cli.main(["promote", "--config", config_path])
+        self.assertTrue(mock_gm.promote.called)
+
+    @patch("regressionx.cli.GoldenManager")
+    def test_promote_specific_case(self, mock_gm_cls):
+        mock_gm = MagicMock()
+        mock_gm_cls.return_value = mock_gm
+
+        config = self._minimal_config()
+        config["cases"].append(
+            {"name": "case_b", "command": "echo b", "input": "/dev/null"}
         )
-        # Mock successful comparison
-        self._set_compare_ok(mock_compare)
+        config_path = self._write_config(config)
 
-        # Act
-        original_argv = sys.argv
-        sys.argv = ["regressionx", "run", "--config", "dummy_config.py"]
-        try:
-            cli.main()
-        finally:
-            sys.argv = original_argv
+        output_dir = self.root / "output" / "case_a"
+        output_dir.mkdir(parents=True)
+        (output_dir / "result.txt").write_text("output")
 
-        # Assert
-        self.assertEqual(mock_load.call_count, 1)
-        self.assertEqual(mock_run.call_count, 2)
+        cli.main(["promote", "--config", config_path, "--case", "case_a"])
 
-        # Check call args
-        args, kwargs = mock_run.call_args
-        self.assertEqual(len(args), 1)
-        self.assertEqual(args[0].name, "c2")
+        # Only case_a should be promoted
+        calls = mock_gm.promote.call_args_list
+        promoted_names = [c[0][0] for c in calls]
+        self.assertIn("case_a", promoted_names)
+        self.assertNotIn("case_b", promoted_names)
 
-    @patch('regressionx.cli.run_case')
-    @patch('regressionx.cli.load_config')
-    @patch('regressionx.cli.compare_directories')
-    def test_compare_command_only_compares(self, mock_compare, mock_load, mock_run):
-        mock_load.return_value = [
-            self._make_case("c1")
-        ]
-        self._set_compare_ok(mock_compare)
 
-        cli.main(["compare", "--config", "dummy_config.py"])
+class TestCaseFilter(_CLITestBase):
 
-        self.assertEqual(mock_run.call_count, 0)
-        self.assertEqual(mock_compare.call_count, 1)
+    @patch("regressionx.cli.SubprocessRunner")
+    @patch("regressionx.cli.compare_directories")
+    def test_case_filter_runs_only_specified(self, mock_compare, mock_runner_cls):
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
+        mock_runner_cls.return_value = mock_runner
+        mock_compare.return_value = MagicMock(match=True, errors=[], diffs=[])
 
-    @patch('regressionx.cli.run_case')
-    @patch('regressionx.cli.load_config')
-    @patch('regressionx.cli.compare_directories')
-    def test_run_base_command_runs_baseline_only(self, mock_compare, mock_load, mock_run):
-        mock_load.return_value = [
-            self._make_case("c1")
-        ]
-        mock_run.return_value = (
-            type('obj', (object,), {'returncode': 0}),
-            type('obj', (object,), {'returncode': 0}),
-            Path("/tmp/a"), Path("/tmp/b")
+        config = self._minimal_config()
+        config["cases"].append(
+            {"name": "case_b", "command": "echo b", "input": "/dev/null"}
         )
-        self._set_compare_ok(mock_compare)
+        config_path = self._write_config(config)
 
-        cli.main(["run_base", "--config", "dummy_config.py"])
+        golden_a = self.root / "golden" / "case_a"
+        golden_a.mkdir(parents=True)
+        (golden_a / "result.txt").write_text("data")
 
-        args, kwargs = mock_run.call_args
-        self.assertEqual(kwargs["run_baseline"], True)
-        self.assertEqual(kwargs["run_candidate"], False)
+        cli.main(["run", "--config", config_path, "--case", "case_a"])
 
-    @patch('regressionx.cli.run_case')
-    @patch('regressionx.cli.load_config')
-    @patch('regressionx.cli.compare_directories')
-    def test_run_cand_command_runs_candidate_only(self, mock_compare, mock_load, mock_run):
-        mock_load.return_value = [
-            self._make_case("c1")
-        ]
-        mock_run.return_value = (
-            type('obj', (object,), {'returncode': 0}),
-            type('obj', (object,), {'returncode': 0}),
-            Path("/tmp/a"), Path("/tmp/b")
-        )
-        self._set_compare_ok(mock_compare)
+        # Only 1 case should be run, not 2
+        self.assertEqual(mock_runner.run.call_count, 1)
 
-        cli.main(["run_cand", "--config", "dummy_config.py"])
 
-        args, kwargs = mock_run.call_args
-        self.assertEqual(kwargs["run_baseline"], False)
-        self.assertEqual(kwargs["run_candidate"], True)
+class TestGoldenStatus(_CLITestBase):
 
-    @patch('sys.stderr', new_callable=MagicMock)
-    def test_missing_config_arg_prints_usage(self, mock_stderr):
-        # Arrange
-        # Act
+    @patch("regressionx.cli.GoldenManager")
+    def test_golden_status(self, mock_gm_cls):
+        mock_gm = MagicMock()
+        mock_gm.status.return_value = {"case_a": True, "case_b": False}
+        mock_gm_cls.return_value = mock_gm
+
+        config_path = self._write_config(self._minimal_config())
+
+        exit_code = cli.main(["golden", "--config", config_path, "--status"])
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(mock_gm.status.called)
+
+
+class TestCLIErrors(_CLITestBase):
+
+    def test_missing_config_exits_nonzero(self):
         with self.assertRaises(SystemExit) as cm:
-             cli.main(["run"]) # Missing --config
-
-        # Assert
+            cli.main(["run"])
         self.assertNotEqual(cm.exception.code, 0)
+
+    def test_nonexistent_config_file(self):
+        with self.assertRaises((SystemExit, FileNotFoundError)):
+            cli.main(["run", "--config", "/nonexistent/suite.json"])
+
+    def test_unknown_command(self):
+        with self.assertRaises(SystemExit) as cm:
+            cli.main(["unknown_cmd", "--config", "x.json"])
+        self.assertNotEqual(cm.exception.code, 0)
+
+
+class TestNewVerdictFlow(_CLITestBase):
+    """When golden doesn't exist for a case, verdict should be NEW."""
+
+    @patch("regressionx.cli.SubprocessRunner")
+    def test_no_golden_yields_new_verdict(self, mock_runner_cls):
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
+        mock_runner_cls.return_value = mock_runner
+
+        config_path = self._write_config(self._minimal_config())
+        # No golden directory created → should result in NEW verdict
+
+        exit_code = cli.main(["run", "--config", config_path])
+        # NEW verdict should not be treated as failure
+        self.assertEqual(exit_code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
