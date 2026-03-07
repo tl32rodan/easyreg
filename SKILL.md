@@ -1,23 +1,25 @@
 # RegressionX MCP Skill Guide
 
-> **目標讀者**: AI Agent (尤其是 qwen3-235B 等較舊模型)
-> 本文件描述如何正確使用 RegressionX MCP server 提供的 tools。
+> **Audience**: AI agents (especially older models such as qwen3-235B)
+> This document describes how to correctly use the tools exposed by the
+> RegressionX MCP server.
 
 ---
 
-## 什麼是 RegressionX？
+## What is RegressionX?
 
-RegressionX 是一個 **regression testing platform**，用來：
-1. 執行測試案例 (case) 的 command
-2. 將執行結果與 golden reference 比對
-3. 報告 PASS / FAIL / NEW / ERROR
-4. 管理 golden reference 的升級 (promote)
+RegressionX is a **regression testing platform** that:
+
+1. Executes test case commands
+2. Compares execution outputs against **golden references** (verified expected output)
+3. Reports a verdict: `PASS` / `FAIL` / `NEW` / `ERROR`
+4. Manages golden reference promotion
 
 ---
 
-## MCP Server 啟動方式
+## Starting the MCP Server
 
-此 MCP server 使用 **FastMCP** 實作。
+This MCP server is implemented with **FastMCP**.
 
 ```json
 {
@@ -25,19 +27,19 @@ RegressionX 是一個 **regression testing platform**，用來：
     "regressionx": {
       "command": "python",
       "args": ["mcp_server.py"],
-      "cwd": "<RegressionX-CLI 根目錄的絕對路徑>"
+      "cwd": "<absolute path to the RegressionX-CLI root directory>"
     }
   }
 }
 ```
 
-或透過 fastmcp CLI：
+Or via the fastmcp CLI:
 
 ```bash
 fastmcp run mcp_server.py
 ```
 
-依賴安裝：
+Install dependency:
 
 ```bash
 pip install fastmcp
@@ -45,114 +47,115 @@ pip install fastmcp
 
 ---
 
-## 可用 Tools 一覽
+## Available Tools
 
-| Tool 名稱 | 用途 | 必填參數 | 選填參數 |
+| Tool | Purpose | Required params | Optional params |
 |---|---|---|---|
-| `regressionx_show_config` | 查看 suite 設定內容 | `config_path` | — |
-| `regressionx_run` | 執行 cases 並比對 golden | `config_path` | `case_name`, `parallel` |
-| `regressionx_compare` | 只比對（不重新執行） | `config_path` | `case_name` |
-| `regressionx_promote` | 把 output 升級為 golden | `config_path` | `case_name` |
-| `regressionx_golden_status` | 檢查 golden 是否存在 | `config_path` | — |
+| `regressionx_show_config` | Inspect suite config contents | `config_path` | — |
+| `regressionx_run` | Execute cases and compare against golden | `config_path` | `case_name`, `parallel` |
+| `regressionx_compare` | Compare only (no re-execution) | `config_path` | `case_name` |
+| `regressionx_promote` | Promote output to golden | `config_path` | `case_name` |
+| `regressionx_golden_status` | Check whether golden references exist | `config_path` | — |
 
 ---
 
-## ⚠️ 重要：使用順序與判斷時機
+## ⚠️ Tool Selection and Ordering
 
-### 標準流程（請嚴格按此順序）
+### Standard workflow (follow this order strictly)
 
 ```
-步驟 1: regressionx_show_config   ← 先看設定，確認 config_path 正確
-步驟 2: regressionx_golden_status ← 確認 golden 是否已建立
-步驟 3: regressionx_run           ← 執行測試
-步驟 4: (如果 verdict=NEW) regressionx_promote ← 首次建立 golden
+Step 1: regressionx_show_config   — inspect the config; confirm config_path is correct
+Step 2: regressionx_golden_status — check whether golden references have been created
+Step 3: regressionx_run           — execute test cases
+Step 4: regressionx_promote       — (only if verdict=NEW) create golden for the first time
 ```
 
-### 什麼時候用哪個 tool？
+### When to use which tool
 
-| 情境 | 應該用的 tool | 不要用的 tool |
+| Situation | Use | Do NOT use |
 |---|---|---|
-| 「我想跑回歸測試」 | `regressionx_run` | ~~regressionx_compare~~ |
-| 「已經跑過了，只想重新比對」 | `regressionx_compare` | ~~regressionx_run~~ |
-| 「測試結果是 NEW，要建立 golden」 | `regressionx_promote` | — |
-| 「不確定 config 裡有什麼」 | `regressionx_show_config` | — |
-| 「golden 有沒有準備好？」 | `regressionx_golden_status` | — |
+| "I want to run regression tests" | `regressionx_run` | ~~regressionx_compare~~ |
+| "Outputs already exist; just re-check the diff" | `regressionx_compare` | ~~regressionx_run~~ |
+| "Verdict is NEW; I need to create a golden" | `regressionx_promote` | — |
+| "I'm not sure what cases are in the config" | `regressionx_show_config` | — |
+| "Is golden already set up?" | `regressionx_golden_status` | — |
 
 ---
 
-## ⚠️ 參數填寫提示（防止常見錯誤）
+## ⚠️ Parameter Hints (prevent common mistakes)
 
 ### config_path
 
-- **必須是字串**，指向一個 `.json` 檔案
-- 可以是相對路徑或絕對路徑
-- **正確範例**: `"examples/simple_suite.json"`
-- **錯誤範例**: `examples/simple_suite`（缺少 .json）、`null`、`{}`
+- Must be a **string** pointing to a `.json` file
+- Accepts relative or absolute paths
+- **Correct**: `"examples/simple_suite.json"`
+- **Wrong**: `"examples/simple_suite"` (missing `.json`), `null`, `{}`
 
 ```json
-// ✅ 正確
+// ✅ Correct
 {"config_path": "examples/simple_suite.json"}
 
-// ❌ 錯誤 — 不要漏掉 .json 副檔名
+// ❌ Wrong — do not omit the .json extension
 {"config_path": "examples/simple_suite"}
 
-// ❌ 錯誤 — 不要傳空物件或 null
+// ❌ Wrong — do not pass null or an object
 {"config_path": null}
 ```
 
 ### case_name
 
-- **選填**，省略表示跑「全部 cases」
-- 必須**完全匹配** suite config 中某個 case 的 `name` 欄位
-- **先用 `regressionx_show_config` 查看有哪些 case name**，再填入
-- **正確範例**: `"hello"`、`"case_a"`
-- **錯誤範例**: `"Hello"`（大小寫不對）、`"all"`（不存在的 name）
+- **Optional** — omit it to run/compare/promote **all** cases
+- Must **exactly match** a case `name` field in the config (case-sensitive)
+- **Always call `regressionx_show_config` first** to get the correct names
+- **Correct**: `"hello"`, `"case_a"`
+- **Wrong**: `"Hello"` (wrong case), `"all"` (not a real name), `"*"` (not a glob)
 
 ```json
-// ✅ 正確 — 只跑名為 "hello" 的 case
+// ✅ Correct — run only the case named "hello"
 {"config_path": "examples/simple_suite.json", "case_name": "hello"}
 
-// ✅ 正確 — 跑所有 case（不傳 case_name）
+// ✅ Correct — run all cases (omit case_name)
 {"config_path": "examples/simple_suite.json"}
 
-// ❌ 錯誤 — 不要傳 "*" 或 "all"，直接省略即可
+// ❌ Wrong — do not use "*" or "all"; just omit the parameter
 {"config_path": "examples/simple_suite.json", "case_name": "*"}
 ```
 
 ### parallel
 
-- **選填**，僅用於 `regressionx_run`
-- 必須是**正整數**，預設為 `1`
-- 不要傳 `0` 或負數
+- **Optional**, only used by `regressionx_run`
+- Must be a **positive integer**; default is `1`
+- Do not pass `0` or a negative value
+- Do not pass a string
 
 ```json
-// ✅ 正確
+// ✅ Correct
 {"config_path": "examples/simple_suite.json", "parallel": 4}
 
-// ❌ 錯誤 — 不要傳字串
+// ❌ Wrong — do not pass a string
 {"config_path": "examples/simple_suite.json", "parallel": "4"}
 ```
 
 ---
 
-## Verdict 含義
+## Verdict Reference
 
-| Verdict | 意思 | 下一步行動 |
+| Verdict | Meaning | Next action |
 |---|---|---|
-| `PASS` | 輸出與 golden 完全一致 | 無需動作 |
-| `FAIL` | 輸出與 golden 不一致 | 檢查 diffs 欄位，分析差異原因 |
-| `NEW` | 沒有 golden reference | 確認輸出正確後呼叫 `regressionx_promote` |
-| `ERROR` | 執行 command 失敗 | 檢查 errors 欄位，修正 command 或環境 |
+| `PASS` | Output matches golden exactly | Nothing needed |
+| `FAIL` | Output differs from golden | Inspect the `diffs` field; investigate the cause |
+| `NEW` | No golden reference exists yet | Confirm output is correct, then call `regressionx_promote` |
+| `ERROR` | Command execution failed | Inspect the `errors` field; fix the command or environment |
 
 ---
 
-## 回傳值結構
+## Response Structure
 
 ### regressionx_run / regressionx_compare
 
 ```json
 {
-  "suite": "suite 名稱",
+  "suite": "suite_name",
   "summary": {"PASS": 1, "FAIL": 0, "NEW": 0, "ERROR": 0},
   "results": [
     {
@@ -165,8 +168,8 @@ pip install fastmcp
 }
 ```
 
-- `diffs`: 列出不一致的檔案路徑（verdict=FAIL 時才有內容）
-- `errors`: 列出錯誤訊息（verdict=ERROR 時才有內容）
+- `diffs`: list of mismatched file paths (non-empty only when verdict is `FAIL`)
+- `errors`: list of error messages (non-empty only when verdict is `ERROR`)
 
 ### regressionx_promote
 
@@ -182,24 +185,24 @@ pip install fastmcp
 
 ### regressionx_show_config
 
-回傳完整的 suite 結構化資料，包含所有 cases、diff_rules、env 等。
+Returns the fully parsed suite structure including all cases, diff_rules, env, and versions.
 
 ---
 
-## 常見錯誤與排除
+## Common Errors and Fixes
 
-| 錯誤訊息 | 原因 | 解法 |
+| Error message | Cause | Fix |
 |---|---|---|
-| `Config file not found: xxx` | config_path 路徑不存在 | 確認檔案路徑正確，注意相對路徑的起始目錄 |
-| `No case named 'xxx' found` | case_name 拼錯或不存在 | 先用 `regressionx_show_config` 查看正確的 case name |
-| `Source directory does not exist` | promote 時 output 目錄不存在 | 先執行 `regressionx_run` 產生 output |
-| `Config missing required field` | JSON 設定檔缺少必要欄位 | 確認 JSON 包含 suite, golden_dir, output_dir, cases |
+| `Config file not found: xxx` | `config_path` does not exist | Verify the path; check relative path base directory |
+| `No case named 'xxx' found` | `case_name` is misspelled or absent | Call `regressionx_show_config` first to get exact case names |
+| `Source directory does not exist` | Output directory missing during promote | Run `regressionx_run` first to produce the output |
+| `Config missing required field` | Suite JSON is missing a required key | Ensure JSON contains `suite`, `golden_dir`, `output_dir`, `cases` |
 
 ---
 
-## Suite JSON Config 格式速查
+## Suite JSON Config Quick Reference
 
-一個最小可用的 suite config：
+Minimal valid suite config:
 
 ```json
 {
@@ -215,48 +218,49 @@ pip install fastmcp
 }
 ```
 
-### Diff Rules 類型
+### Diff Rule Types
 
-| type | 用途 | pattern 範例 | replace |
+| type | Purpose | `pattern` example | `replace` |
 |---|---|---|---|
-| `ignore_line` | 整行匹配 regex 就跳過 | `"^#.*timestamp"` | 不需要 |
-| `ignore_regex` | 行內替換後再比較 | `"PID=\\d+"` | `"PID=XXX"` |
-| `ignore_file` | 忽略特定檔案 (glob) | `"*.log"` | 不需要 |
-| `ignore_folder` | 忽略特定目錄 (glob) | `"tmp/"` | 不需要 |
-| `sort_lines` | 比較前先排序 | `".*"` (任意) | 不需要 |
-| `tolerance` | 數值容差比較 | `".*"` (任意) | `"0.001"` (容差值) |
+| `ignore_line` | Drop entire lines matching a regex | `"^#.*timestamp"` | not needed |
+| `ignore_regex` | Replace matched text within a line before comparing | `"PID=\\d+"` | `"PID=XXX"` |
+| `ignore_file` | Ignore files matching a glob pattern | `"*.log"` | not needed |
+| `ignore_folder` | Ignore directories matching a glob pattern | `"tmp/"` | not needed |
+| `sort_lines` | Sort lines before comparing (handles unstable output order) | `".*"` (any) | not needed |
+| `tolerance` | Numeric tolerance for floating-point values | `".*"` (any) | `"0.001"` (tolerance value) |
 
 ---
 
-## 完整使用範例
+## Full Worked Examples
 
-### 範例 1：首次建立 golden
+### Example 1 — First-time golden setup
 
 ```
-Agent 思考: 使用者要我對 examples/simple_suite.json 建立回歸測試
+Agent reasoning: the user wants to set up regression tests for examples/simple_suite.json
 
-1. 呼叫 regressionx_show_config(config_path="examples/simple_suite.json")
-   → 確認有 1 個 case: "hello"
+1. Call regressionx_show_config(config_path="examples/simple_suite.json")
+   → Confirms there is 1 case: "hello"
 
-2. 呼叫 regressionx_golden_status(config_path="examples/simple_suite.json")
-   → golden 不存在
+2. Call regressionx_golden_status(config_path="examples/simple_suite.json")
+   → Golden does not exist yet
 
-3. 呼叫 regressionx_run(config_path="examples/simple_suite.json")
-   → verdict: NEW（沒有 golden 可比對）
+3. Call regressionx_run(config_path="examples/simple_suite.json")
+   → verdict: NEW (no golden to compare against)
 
-4. 確認 output 正確後，呼叫 regressionx_promote(config_path="examples/simple_suite.json")
+4. Confirm the output looks correct, then call:
+   regressionx_promote(config_path="examples/simple_suite.json")
    → promoted: ["hello"]
 
-5. 再次呼叫 regressionx_run(config_path="examples/simple_suite.json")
-   → verdict: PASS（現在有 golden 了）
+5. Call regressionx_run(config_path="examples/simple_suite.json") again
+   → verdict: PASS (golden now exists)
 ```
 
-### 範例 2：日常回歸測試
+### Example 2 — Routine regression check
 
 ```
-Agent 思考: 使用者修改了程式碼，要驗證有沒有 regression
+Agent reasoning: the user modified code and wants to check for regressions
 
-1. 呼叫 regressionx_run(config_path="examples/simple_suite.json")
-   → 檢查 summary：如果全部 PASS，回報「無 regression」
-   → 如果有 FAIL，查看 diffs 欄位，告知使用者哪些檔案不一致
+1. Call regressionx_run(config_path="examples/simple_suite.json")
+   → Check summary: if all PASS, report "no regression detected"
+   → If any FAIL, inspect the diffs field and report which files differ
 ```
