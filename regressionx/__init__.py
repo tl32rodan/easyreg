@@ -1,4 +1,3 @@
-from .domain import Case as Case
-from .config import load_config as load_config
-from .factory import Template as Template
-
+"""RegressionX — Regression Testing Platform."""
+from .model import Suite, Case, DiffRule, Verdict, CaseResult, RunResult
+from .config import load_config
