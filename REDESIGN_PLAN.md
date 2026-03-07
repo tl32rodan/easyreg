@@ -94,7 +94,9 @@ Legacy 程式碼持續累積，因為沒有人敢動「能跑的東西」。
     {"type": "ignore_line", "pattern": "^#.*timestamp.*"},
     {"type": "ignore_line", "pattern": "^# Generated at"},
     {"type": "ignore_regex", "pattern": "PID=\\d+", "replace": "PID=XXX"},
-    {"type": "ignore_file", "pattern": "*.log"}
+    {"type": "ignore_file", "pattern": "*.log"},
+    {"type": "ignore_folder", "pattern": "tmp/"},
+    {"type": "ignore_folder", "pattern": "__pycache__/"}
   ],
 
   // 全域環境變數
@@ -141,7 +143,8 @@ Legacy 程式碼持續累積，因為沒有人敢動「能跑的東西」。
 ```
 ignore_line    → 整行匹配 regex 就跳過該行
 ignore_regex   → 行內匹配 regex 替換後再比較
-ignore_file    → 忽略特定檔名 pattern 的檔案
+ignore_file    → 忽略特定檔名 pattern 的檔案（glob，如 *.log）
+ignore_folder  → 忽略特定目錄 pattern（glob，如 tmp/、__pycache__/）
 tolerance      → 數值容差（未來擴展）
 sort_lines     → 比較前先排序（處理不穩定輸出順序）
 ```
