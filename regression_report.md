@@ -1,13 +1,15 @@
 # RegressionX Report
 
-**Total:** 3 | **Passed:** 3 | **Failed:** 0
+**Total:** 1 | **Passed:** 0 | **Failed:** 1 | **New:** 0 | **Errors:** 0
 
 ## Summary
+
 | Case | Status |
 | :--- | :--- |
-| auth_fast | PASSED |
-| auth_full | PASSED |
-| payment_fast | PASSED |
+| case_a | FAIL |
 
 ## Failure Details
-No failures detected.
+
+### case_a
+
+- [Content] Content mismatch: f.txt

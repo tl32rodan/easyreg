@@ -1,0 +1,12 @@
+{
+  "suite": "simple_demo",
+  "golden_dir": "examples/golden/{case}",
+  "output_dir": "examples/runs/{case}",
+  "cases": [
+    {
+      "name": "hello",
+      "command": "echo 'Hello, World!' > greeting.txt",
+      "input": "/dev/null"
+    }
+  ]
+}
