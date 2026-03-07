@@ -2,12 +2,12 @@
 import sys
 import os
 
-# Add project root to sys.path so we can import regressionx without installing it
+# Add project root to sys.path so we can import easyreg without installing it
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, project_root)
 
 try:
-    from regressionx.cli import main
+    from easyreg.cli import main
 except ImportError as e:
     print(f"Error importing regressionx: {e}", file=sys.stderr)
     sys.exit(1)

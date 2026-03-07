@@ -1,4 +1,4 @@
-"""Tests for regressionx.comparator — Directory and content comparison.
+"""Tests for easyreg.comparator — Directory and content comparison.
 
 Covers:
 - Identical directories → PASS
@@ -14,8 +14,8 @@ import shutil
 from pathlib import Path
 
 try:
-    from regressionx.model import DiffRule
-    from regressionx.comparator import compare_directories, ComparisonResult
+    from easyreg.model import DiffRule
+    from easyreg.comparator import compare_directories, ComparisonResult
 except ImportError:
     DiffRule = None
     compare_directories = None
@@ -224,7 +224,7 @@ class TestSortLinesComparison(_ComparatorTestBase):
 
     def setUp(self):
         try:
-            from regressionx.comparator.diff_rules import apply_sort_lines
+            from easyreg.comparator.diff_rules import apply_sort_lines
             if apply_sort_lines is None:
                 raise ImportError
         except ImportError:
@@ -264,7 +264,7 @@ class TestToleranceComparison(_ComparatorTestBase):
 
     def setUp(self):
         try:
-            from regressionx.comparator.diff_rules import lines_within_tolerance
+            from easyreg.comparator.diff_rules import lines_within_tolerance
             if lines_within_tolerance is None:
                 raise ImportError
         except ImportError:

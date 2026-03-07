@@ -1,8 +1,8 @@
-# RegressionX MCP Skill Guide
+# easyreg MCP Skill Guide
 
 > **Audience**: AI agents (especially older models such as qwen3-235B)
 > This document describes how to correctly use the tools exposed by the
-> RegressionX MCP server.
+> easyreg MCP server.
 
 ---
 

@@ -1,4 +1,4 @@
-"""Tests for regressionx.comparator.diff_rules — Diff rule engine.
+"""Tests for easyreg.comparator.diff_rules — Diff rule engine.
 
 Covers:
 - ignore_line: skip lines matching regex
@@ -13,8 +13,8 @@ Covers:
 import unittest
 
 try:
-    from regressionx.model import DiffRule
-    from regressionx.comparator.diff_rules import (
+    from easyreg.model import DiffRule
+    from easyreg.comparator.diff_rules import (
         apply_line_rules,
         should_ignore_file,
         should_ignore_folder,

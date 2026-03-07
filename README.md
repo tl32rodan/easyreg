@@ -1,99 +1,89 @@
-# RegressionX-CLI
+# easyreg
 
-**The "Standard Library First" A/B Regression Tool.**
+**Easy regression testing — run, compare, promote.**
 
-RegressionX is a lightweight, zero-dependency Python tool designed to run A/B regression tests. It compares the output of two command versions (Baseline vs Candidate) by executing them in per-case output directories and strictly verifying their output directories.
+easyreg is a lightweight, zero-dependency Python tool for building regression
+test suites. It executes test case commands, compares outputs against golden
+references, and reports `PASS` / `FAIL` / `NEW` / `ERROR` — giving your team
+confidence to refactor without fear.
 
 ## Key Features
 
-- **A/B Testing**: Runs two versions of a command side-by-side (`old_tool` vs `new_tool`).
-- **Per-Case Output Paths**: Each case declares its own baseline/candidate output directories, making it easy to inspect and archive results.
-- **Python-as-Config**: Use the full power of Python to define your test cases and templates.
-- **Markdown Reporting**: Generates simple, grep-friendly `.md` reports suitable for LSF logs and Git.
-- **Zero Dependencies**: Requires only Python 3. No `pip install` needed.
+- **Golden-based comparison**: verified expected output stored on the filesystem
+- **Configurable diff rules**: ignore timestamps, PIDs, log files, and more
+- **Parallel execution**: run cases concurrently with `--parallel N`
+- **Multiple report formats**: Markdown (human) and JSON (CI/CD)
+- **MCP server**: expose easyreg as AI agent tools via `mcp_server.py`
+- **Zero dependencies**: pure Python 3.8+, no `pip install` needed (except FastMCP for MCP server)
 
 ## Quick Start
 
-1.  **Define your configuration** (e.g., `examples/factory_config.py`):
+1. **Define a suite config** (`my_suite.json`):
 
-    ```python
-    from regressionx import Template
-
-    # run_logic defines the shape of the command
-    run_logic = Template(
-        baseline_command="python old_script.py {args}",
-        candidate_command="python new_script.py {args}",
-        base_path="runs/{name}/baseline",
-        cand_path="runs/{name}/candidate"
-    )
-
-    # generate creates the list of cases
-    cases = run_logic.generate([
-        {"name": "test_fast", "args": "--mode fast"},
-        {"name": "test_slow", "args": "--mode slow"},
-    ])
+    ```json
+    {
+      "suite": "my_test",
+      "golden_dir": "golden/{case}",
+      "output_dir": "runs/{case}",
+      "cases": [
+        {
+          "name": "hello",
+          "command": "echo 'Hello, World!' > greeting.txt"
+        }
+      ]
+    }
     ```
 
-2.  **Run the regression**:
+2. **Run the suite**:
 
     ```bash
-    # Linux / Git Bash
-    python bin/regressionX run --config examples/factory_config.py
-
-    # Windows (PowerShell)
-    python bin/regressionX run --config examples/factory_config.py
+    python bin/easyreg run --config my_suite.json
     ```
 
-3.  **View the Report**:
+3. **First run — promote outputs to golden**:
 
-    Check `regression_report.md` (generated in CWD by default).
-
-    ```markdown
-    # RegressionX Report
-    **Total:** 2 | **Passed:** 1 | **Failed:** 1
-
-    ## Failure Details
-    ### test_slow
-    - [Content] Content mismatch: output.log
+    ```bash
+    python bin/easyreg promote --config my_suite.json
     ```
 
-## CLI Options
+4. **Subsequent runs compare against golden**:
+
+    ```bash
+    python bin/easyreg run --config my_suite.json
+    # → PASS
+    ```
+
+## CLI Commands
 
 ```bash
-usage: regressionX {run,compare,run_base,run_cand} [-h] --config CONFIG [--report REPORT]
-
-options:
-  -h, --help       show this help message and exit
-  --config CONFIG  Path to config file (required)
-  --report REPORT  Path to generate Markdown report (default: regression_report.md)
+easyreg run     --config suite.json              # Execute cases + compare golden
+easyreg run     --config suite.json --case hello # Run a single case
+easyreg run     --config suite.json --parallel 4 # Run cases in parallel
+easyreg compare --config suite.json              # Compare existing outputs (no re-run)
+easyreg promote --config suite.json              # Promote outputs to golden
+easyreg golden  --config suite.json --status     # Show golden reference status
 ```
 
-### Modes
+Report format (default Markdown, or JSON for CI):
 
-- `run`: execute baseline and candidate, then compare outputs
-- `compare`: compare `base_path`/`cand_path` without running any commands
-- `run_base`: run baseline only, then compare with candidate output
-- `run_cand`: run candidate only, then compare with baseline output
+```bash
+easyreg run --config suite.json --report-format json --report result.json
+```
 
 ## Development
 
-This project uses **Test-Driven Development (TDD)** and provides a `Makefile` for common tasks.
+```bash
+make test          # Run all tests
+make demo          # Run the simple demo
+make demo-rules    # Run the diff rules demo
+make clean         # Remove generated artifacts
+```
 
--   **Run Tests**:
-    ```bash
-    make test
-    # or
-    python -m unittest discover tests
-    ```
+## MCP Server (AI Agent integration)
 
--   **Run Demos**:
-    ```bash
-    make demo          # Run passing demo
-    make demo-fail     # Run failing demo
-    make demo-nested   # Run nested output demo
-    ```
+```bash
+pip install fastmcp
+python mcp_server.py   # stdio transport
+```
 
--   **Clean Artifacts**:
-    ```bash
-    make clean
-    ```
+See [SKILL.md](SKILL.md) for the full agent usage guide.

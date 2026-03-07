@@ -1,4 +1,4 @@
-"""Tests for regressionx.golden — Golden reference management.
+"""Tests for easyreg.golden — Golden reference management.
 
 Covers:
 - Read golden directory (exists vs not exists)
@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 
 try:
-    from regressionx.golden import GoldenManager
+    from easyreg.golden import GoldenManager
 except ImportError:
     GoldenManager = None
 

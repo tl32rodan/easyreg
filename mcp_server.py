@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RegressionX MCP Server — built with FastMCP.
+"""easyreg MCP Server — built with FastMCP.
 
 Usage:
     python mcp_server.py          # stdio transport (default)
@@ -15,11 +15,11 @@ from fastmcp import FastMCP
 # Ensure regressionx package is importable when run from any directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from regressionx.comparator import compare_directories
-from regressionx.comparator.diff_rules import resolve_effective_rules
-from regressionx.config import load_config
-from regressionx.golden import GoldenManager
-from regressionx.runner.subprocess_runner import SubprocessRunner
+from easyreg.comparator import compare_directories
+from easyreg.comparator.diff_rules import resolve_effective_rules
+from easyreg.config import load_config
+from easyreg.golden import GoldenManager
+from easyreg.runner.subprocess_runner import SubprocessRunner
 
 
 # ---------------------------------------------------------------------------
@@ -27,10 +27,10 @@ from regressionx.runner.subprocess_runner import SubprocessRunner
 # ---------------------------------------------------------------------------
 
 mcp = FastMCP(
-    name="regressionx-mcp",
+    name="easyreg-mcp",
     version="0.2.0",
     instructions=(
-        "RegressionX regression testing tools. "
+        "easyreg regression testing tools. "
         "Recommended workflow: "
         "1) regressionx_show_config — inspect suite before anything else; "
         "2) regressionx_golden_status — check if golden references exist; "
@@ -73,7 +73,7 @@ def _golden_root(suite) -> Path:
 def regressionx_show_config(
     config_path: str,
 ) -> dict:
-    """Inspect a RegressionX suite config file.
+    """Inspect a easyreg suite config file.
 
     Args:
         config_path: REQUIRED. Path to the suite JSON config file.

@@ -1,11 +1,11 @@
-"""Tests for regressionx.model — Data models.
+"""Tests for easyreg.model — Data models.
 
 Covers: Suite, Case, DiffRule, RunResult, Verdict, CaseResult
 """
 import unittest
 
 try:
-    from regressionx.model import (
+    from easyreg.model import (
         Suite, Case, DiffRule, RunResult, Verdict, CaseResult,
     )
 except ImportError:

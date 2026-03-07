@@ -1,4 +1,4 @@
-"""Tests for regressionx.reporter.json_reporter — JSON report generation.
+"""Tests for easyreg.reporter.json_reporter — JSON report generation.
 
 Covers:
 - Valid JSON output
@@ -13,8 +13,8 @@ import tempfile
 import unittest
 
 try:
-    from regressionx.model import CaseResult, RunResult, Verdict
-    from regressionx.reporter.json_reporter import JsonReporter
+    from easyreg.model import CaseResult, RunResult, Verdict
+    from easyreg.reporter.json_reporter import JsonReporter
 except ImportError:
     CaseResult = RunResult = Verdict = JsonReporter = None
 

@@ -1,4 +1,4 @@
-"""Tests for regressionx.runner — Subprocess execution engine.
+"""Tests for easyreg.runner — Subprocess execution engine.
 
 Covers:
 - Execute command in sandbox directory
@@ -15,8 +15,8 @@ import os
 from pathlib import Path
 
 try:
-    from regressionx.model import Case, RunResult
-    from regressionx.runner.subprocess_runner import SubprocessRunner
+    from easyreg.model import Case, RunResult
+    from easyreg.runner.subprocess_runner import SubprocessRunner
 except ImportError:
     Case = RunResult = SubprocessRunner = None
 
