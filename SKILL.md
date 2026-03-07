@@ -17,6 +17,8 @@ RegressionX 是一個 **regression testing platform**，用來：
 
 ## MCP Server 啟動方式
 
+此 MCP server 使用 **FastMCP** 實作。
+
 ```json
 {
   "mcpServers": {
@@ -27,6 +29,18 @@ RegressionX 是一個 **regression testing platform**，用來：
     }
   }
 }
+```
+
+或透過 fastmcp CLI：
+
+```bash
+fastmcp run mcp_server.py
+```
+
+依賴安裝：
+
+```bash
+pip install fastmcp
 ```
 
 ---
