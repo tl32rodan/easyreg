@@ -1,0 +1,27 @@
+{
+  "suite": "diff_rules_demo",
+  "golden_dir": "examples/golden/{case}",
+  "output_dir": "examples/runs/{case}",
+  "diff_rules": [
+    {"type": "ignore_line", "pattern": "^# Generated at"},
+    {"type": "ignore_regex", "pattern": "PID=\\d+", "replace": "PID=XXX"},
+    {"type": "ignore_file", "pattern": "*.log"},
+    {"type": "ignore_folder", "pattern": "tmp/"}
+  ],
+  "cases": [
+    {
+      "name": "with_timestamp",
+      "command": "echo '# Generated at 2025-01-01' > report.txt && echo 'result: 42' >> report.txt",
+      "input": "/dev/null"
+    },
+    {
+      "name": "custom_rules",
+      "command": "echo 'DEBUG: starting' > output.txt && echo 'result: ok' >> output.txt",
+      "input": "/dev/null",
+      "diff_rules_mode": "append",
+      "diff_rules": [
+        {"type": "ignore_line", "pattern": "^DEBUG:"}
+      ]
+    }
+  ]
+}

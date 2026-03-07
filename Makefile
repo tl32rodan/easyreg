@@ -1,4 +1,4 @@
-.PHONY: test run clean demo demo-fail demo-nested
+.PHONY: test clean demo demo-rules
 
 PYTHON?=python
 
@@ -6,18 +6,16 @@ test:
 	$(PYTHON) -m unittest discover tests
 
 clean:
-	$(PYTHON) -c "import pathlib; [p.unlink() for p in pathlib.Path('.').rglob('*.pyc')]"
-	$(PYTHON) -c "import pathlib; [p.rmdir() for p in pathlib.Path('.').rglob('__pycache__')]"
-	$(PYTHON) -c "import pathlib; [p.unlink() for p in pathlib.Path('.').glob('*.html')]"
-	$(PYTHON) -c "import pathlib; [p.unlink() for p in pathlib.Path('.').glob('*.md') if 'README' not in p.name]"
+	find . -name '*.pyc' -delete
+	find . -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
+	rm -rf examples/runs examples/golden regression_report.md
 
 demo:
-	$(PYTHON) bin/regressionX run --config examples/factory_config.py
+	$(PYTHON) bin/regressionX run --config examples/simple_suite.json --report demo_report.md
+	@echo "--- Report ---"
+	@cat demo_report.md
 
-demo-fail:
-	$(PYTHON) bin/regressionX run --config examples/ab_fail.py --report demo_fail.md
-	type demo_fail.md
-
-demo-nested:
-	$(PYTHON) bin/regressionX run --config examples/nested_output.py --report nested_report.md
-	type nested_report.md
+demo-rules:
+	$(PYTHON) bin/regressionX run --config examples/diff_rules_suite.json --report demo_rules_report.md
+	@echo "--- Report ---"
+	@cat demo_rules_report.md
