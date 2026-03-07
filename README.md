@@ -37,19 +37,19 @@ confidence to refactor without fear.
 2. **Run the suite**:
 
     ```bash
-    python bin/easyreg run --config my_suite.json
+    python -m easyreg run --config my_suite.json
     ```
 
 3. **First run — promote outputs to golden**:
 
     ```bash
-    python bin/easyreg promote --config my_suite.json
+    python -m easyreg promote --config my_suite.json
     ```
 
 4. **Subsequent runs compare against golden**:
 
     ```bash
-    python bin/easyreg run --config my_suite.json
+    python -m easyreg run --config my_suite.json
     # → PASS
     ```
 

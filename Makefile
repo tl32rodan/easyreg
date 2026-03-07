@@ -11,11 +11,11 @@ clean:
 	rm -rf examples/runs examples/golden regression_report.md
 
 demo:
-	$(PYTHON) bin/easyreg run --config examples/simple_suite.json --report demo_report.md
+	$(PYTHON) -m easyreg run --config examples/simple_suite.json --report demo_report.md
 	@echo "--- Report ---"
 	@cat demo_report.md
 
 demo-rules:
-	$(PYTHON) bin/easyreg run --config examples/diff_rules_suite.json --report demo_rules_report.md
+	$(PYTHON) -m easyreg run --config examples/diff_rules_suite.json --report demo_rules_report.md
 	@echo "--- Report ---"
 	@cat demo_rules_report.md
