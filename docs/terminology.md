@@ -1,4 +1,4 @@
-# RegressionX Terminology
+# easyreg Terminology
 
 | Term | Definition |
 |------|-----------|

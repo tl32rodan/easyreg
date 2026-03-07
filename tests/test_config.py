@@ -1,4 +1,4 @@
-"""Tests for regressionx.config — JSON config loading, validation, placeholder expansion.
+"""Tests for easyreg.config — JSON config loading, validation, placeholder expansion.
 
 Covers:
 - Valid JSON loading → Suite object
@@ -15,12 +15,12 @@ import os
 import shutil
 
 try:
-    from regressionx.config import load_config
+    from easyreg.config import load_config
 except ImportError:
     load_config = None
 
 try:
-    from regressionx.model import Suite, Case, DiffRule
+    from easyreg.model import Suite, Case, DiffRule
 except ImportError:
     Suite = Case = DiffRule = None
 

@@ -1,4 +1,4 @@
-"""Tests for regressionx.reporter — Report generation.
+"""Tests for easyreg.reporter — Report generation.
 
 Covers:
 - Markdown report: all pass, mixed results, NEW verdict
@@ -12,8 +12,8 @@ import shutil
 import os
 
 try:
-    from regressionx.model import CaseResult, Verdict
-    from regressionx.reporter.markdown import MarkdownReporter
+    from easyreg.model import CaseResult, Verdict
+    from easyreg.reporter.markdown import MarkdownReporter
 except ImportError:
     CaseResult = Verdict = MarkdownReporter = None
 

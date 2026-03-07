@@ -1,15 +1,15 @@
-# RegressionX Architecture
+# easyreg Architecture
 
 ## Overview
 
-RegressionX is a regression testing platform that gives teams confidence to
+easyreg is a regression testing platform that gives teams confidence to
 refactor and evolve code. It executes test cases, compares outputs against
 golden references, and produces reports — all with zero external dependencies.
 
 ## Module Structure
 
 ```
-regressionx/
+easyreg/
 ├── model.py             # Data models: Suite, Case, DiffRule, Verdict, etc.
 ├── config.py            # JSON config loading, validation, placeholder expansion
 ├── golden.py            # Golden reference management (CRUD, promotion, backup)
