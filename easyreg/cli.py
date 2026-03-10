@@ -1,18 +1,18 @@
 """CLI entry point for RegressionX."""
 import argparse
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
-from typing import List
 
-from .config import load_config
-from .comparator import compare_directories
-from .comparator.diff_rules import resolve_effective_rules
-from .golden import GoldenManager
-from .model import Case, CaseResult, Suite, Verdict
+from .config import load_config, load_rules_file
+from .model import Verdict
+from .orchestrator import (
+    compare_cases,
+    execute_cases,
+    filter_cases,
+    get_golden_status,
+    promote_cases,
+)
 from .reporter.json_reporter import JsonReporter
 from .reporter.markdown import MarkdownReporter
-from .runner.subprocess_runner import SubprocessRunner
 
 
 def _build_parser():
@@ -28,6 +28,8 @@ def _build_parser():
                        choices=["md", "json"], default="md")
     run_p.add_argument("--parallel", type=int, default=1, metavar="N",
                        help="Number of parallel workers (default: 1)")
+    run_p.add_argument("--ignore-rules", dest="ignore_rules", default=None,
+                       help="Path to external ignore rules JSON file")
 
     # compare
     cmp_p = subparsers.add_parser("compare", help="Compare existing outputs with golden")
@@ -36,11 +38,15 @@ def _build_parser():
     cmp_p.add_argument("--report", default="regression_report.md")
     cmp_p.add_argument("--report-format", dest="report_format",
                        choices=["md", "json"], default="md")
+    cmp_p.add_argument("--ignore-rules", dest="ignore_rules", default=None,
+                       help="Path to external ignore rules JSON file")
 
     # promote
     pro_p = subparsers.add_parser("promote", help="Promote output to golden")
     pro_p.add_argument("--config", required=True)
     pro_p.add_argument("--case", default=None, help="Promote only this case")
+    pro_p.add_argument("--ignore-rules", dest="ignore_rules", default=None,
+                       help="Path to external ignore rules JSON file")
 
     # golden
     gld_p = subparsers.add_parser("golden", help="Golden reference management")
@@ -50,11 +56,12 @@ def _build_parser():
     return parser
 
 
-def _resolve_path(template: str, **kwargs) -> Path:
-    result = template
-    for key, val in kwargs.items():
-        result = result.replace(f"{{{key}}}", str(val))
-    return Path(result)
+def _load_cli_rules(args):
+    """Load rules from --ignore-rules arg if provided."""
+    ignore_rules_path = getattr(args, "ignore_rules", None)
+    if ignore_rules_path:
+        return load_rules_file(ignore_rules_path)
+    return None
 
 
 def _make_reporter(report_path: str, fmt: str):
@@ -63,66 +70,13 @@ def _make_reporter(report_path: str, fmt: str):
     return MarkdownReporter(report_path)
 
 
-def _run_single_case(case: Case, suite: Suite, runner: SubprocessRunner) -> CaseResult:
-    """Execute and compare a single case. Thread-safe."""
-    output_dir = _resolve_path(suite.output_dir, case=case.name, run_id="latest")
-    golden_dir = _resolve_path(suite.golden_dir, case=case.name)
-    env = dict(suite.env) if suite.env else None
-
-    run_result = runner.run(case, output_dir, env=env)
-
-    if run_result.returncode != 0:
-        return CaseResult(
-            case_name=case.name,
-            verdict=Verdict.ERROR,
-            errors=[f"Command exited with code {run_result.returncode}"],
-            run_result=run_result,
-        )
-
-    if not golden_dir.is_dir():
-        return CaseResult(case_name=case.name, verdict=Verdict.NEW)
-
-    effective_rules = resolve_effective_rules(
-        suite.diff_rules, case.diff_rules, case.diff_rules_mode,
-    )
-    cmp = compare_directories(golden_dir, output_dir, diff_rules=effective_rules)
-
-    if cmp.match:
-        return CaseResult(case_name=case.name, verdict=Verdict.PASS)
-    return CaseResult(
-        case_name=case.name, verdict=Verdict.FAIL,
-        diffs=cmp.diffs, errors=cmp.errors,
-    )
-
-
-def _execute_cases(cases: List[Case], suite: Suite, parallel: int) -> List[CaseResult]:
-    """Execute cases sequentially or in parallel."""
-    runner = SubprocessRunner()
-
-    if parallel <= 1:
-        return [_run_single_case(case, suite, runner) for case in cases]
-
-    # Parallel execution — preserve original case order in results
-    results: List[CaseResult] = [None] * len(cases)  # type: ignore
-    with ThreadPoolExecutor(max_workers=parallel) as executor:
-        future_to_idx = {
-            executor.submit(_run_single_case, case, suite, runner): idx
-            for idx, case in enumerate(cases)
-        }
-        for future in as_completed(future_to_idx):
-            idx = future_to_idx[future]
-            results[idx] = future.result()
-    return results
-
-
 def _cmd_run(args):
     suite = load_config(args.config)
-    cases = suite.cases
-    if args.case:
-        cases = [c for c in cases if c.name == args.case]
+    cases = filter_cases(suite, args.case)
+    cli_rules = _load_cli_rules(args)
 
     parallel = getattr(args, "parallel", 1)
-    results = _execute_cases(cases, suite, parallel)
+    results = execute_cases(cases, suite, parallel, cli_rules=cli_rules)
 
     reporter = _make_reporter(args.report, getattr(args, "report_format", "md"))
     reporter.generate(results)
@@ -133,31 +87,10 @@ def _cmd_run(args):
 
 def _cmd_compare(args):
     suite = load_config(args.config)
-    cases = suite.cases
-    if args.case:
-        cases = [c for c in cases if c.name == args.case]
+    cases = filter_cases(suite, args.case)
+    cli_rules = _load_cli_rules(args)
 
-    results = []
-    for case in cases:
-        output_dir = _resolve_path(suite.output_dir, case=case.name, run_id="latest")
-        golden_dir = _resolve_path(suite.golden_dir, case=case.name)
-
-        if not golden_dir.is_dir():
-            results.append(CaseResult(case_name=case.name, verdict=Verdict.NEW))
-            continue
-
-        effective_rules = resolve_effective_rules(
-            suite.diff_rules, case.diff_rules, case.diff_rules_mode,
-        )
-        cmp = compare_directories(golden_dir, output_dir, diff_rules=effective_rules)
-
-        if cmp.match:
-            results.append(CaseResult(case_name=case.name, verdict=Verdict.PASS))
-        else:
-            results.append(CaseResult(
-                case_name=case.name, verdict=Verdict.FAIL,
-                diffs=cmp.diffs, errors=cmp.errors,
-            ))
+    results = compare_cases(cases, suite, cli_rules=cli_rules)
 
     reporter = _make_reporter(args.report, getattr(args, "report_format", "md"))
     reporter.generate(results)
@@ -168,37 +101,21 @@ def _cmd_compare(args):
 
 def _cmd_promote(args):
     suite = load_config(args.config)
-    cases = suite.cases
-    if args.case:
-        cases = [c for c in cases if c.name == args.case]
+    cases = filter_cases(suite, args.case)
+    cli_rules = _load_cli_rules(args)
 
-    if "{case}" in suite.golden_dir:
-        golden_root = Path(suite.golden_dir.split("{case}")[0].rstrip("/"))
-    else:
-        golden_root = Path(suite.golden_dir)
-
-    mgr = GoldenManager(golden_root)
-
-    for case in cases:
-        output_dir = _resolve_path(suite.output_dir, case=case.name, run_id="latest")
-        mgr.promote(case.name, output_dir)
-        print(f"Promoted: {case.name}")
+    promoted = promote_cases(cases, suite, cli_rules=cli_rules)
+    for name in promoted:
+        print(f"Promoted: {name}")
 
     return 0
 
 
 def _cmd_golden(args):
     suite = load_config(args.config)
-
-    if "{case}" in suite.golden_dir:
-        golden_root = Path(suite.golden_dir.split("{case}")[0].rstrip("/"))
-    else:
-        golden_root = Path(suite.golden_dir)
-
-    mgr = GoldenManager(golden_root)
+    status = get_golden_status(suite)
 
     if args.status:
-        status = mgr.status()
         if not status:
             print("No golden references found.")
         else:

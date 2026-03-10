@@ -1,7 +1,7 @@
 """Diff rule engine: filtering and transformation for comparison."""
 import fnmatch
 import re
-from typing import List
+from typing import List, Optional
 
 from ..model import DiffRule
 
@@ -57,17 +57,34 @@ def resolve_effective_rules(
     global_rules: List[DiffRule],
     case_rules: List[DiffRule],
     mode: str,
+    *,
+    file_rules: Optional[List[DiffRule]] = None,
+    cli_rules: Optional[List[DiffRule]] = None,
 ) -> List[DiffRule]:
     """Resolve effective diff rules based on merge mode.
 
+    Layering order:
+    1. global_rules (inline suite-level)
+    2. file_rules (from suite's ignore_rules_file)
+    3. case_rules merged by mode: "append" adds to above, "override" replaces
+    4. cli_rules (from --ignore-rules arg) — always appended last
+
     Args:
-        global_rules: Suite-level diff rules.
+        global_rules: Suite-level inline diff rules.
         case_rules: Case-level diff rules.
         mode: "append" (global + case) or "override" (case only).
+        file_rules: Rules loaded from an external file referenced by the suite.
+        cli_rules: Rules loaded from a CLI --ignore-rules argument.
     """
+    base = list(global_rules) + list(file_rules or [])
+
     if mode == "override":
-        return list(case_rules)
-    return list(global_rules) + list(case_rules)
+        result = list(case_rules)
+    else:
+        result = base + list(case_rules)
+
+    result.extend(cli_rules or [])
+    return result
 
 
 def lines_within_tolerance(

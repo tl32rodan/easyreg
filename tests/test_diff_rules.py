@@ -349,5 +349,63 @@ class TestTolerance(unittest.TestCase):
         self.assertEqual(rule.type, "tolerance")
 
 
+class TestResolveEffectiveRulesLayering(unittest.TestCase):
+    """Tests for the extended resolve_effective_rules with file_rules and cli_rules."""
+
+    def setUp(self):
+        if resolve_effective_rules is None:
+            raise unittest.SkipTest("diff_rules not implemented")
+
+    def test_file_rules_appended_to_global(self):
+        global_r = [DiffRule(type="ignore_file", pattern="*.log")]
+        file_r = [DiffRule(type="ignore_file", pattern="*.tmp")]
+        result = resolve_effective_rules(global_r, [], "append", file_rules=file_r)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0].pattern, "*.log")
+        self.assertEqual(result[1].pattern, "*.tmp")
+
+    def test_cli_rules_appended_last(self):
+        global_r = [DiffRule(type="ignore_file", pattern="*.log")]
+        cli_r = [DiffRule(type="ignore_file", pattern="*.bak")]
+        result = resolve_effective_rules(global_r, [], "append", cli_rules=cli_r)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[-1].pattern, "*.bak")
+
+    def test_override_mode_replaces_global_and_file_but_keeps_cli(self):
+        global_r = [DiffRule(type="ignore_file", pattern="*.log")]
+        file_r = [DiffRule(type="ignore_file", pattern="*.tmp")]
+        case_r = [DiffRule(type="ignore_file", pattern="*.dat")]
+        cli_r = [DiffRule(type="ignore_file", pattern="*.bak")]
+        result = resolve_effective_rules(
+            global_r, case_r, "override", file_rules=file_r, cli_rules=cli_r
+        )
+        patterns = [r.pattern for r in result]
+        self.assertNotIn("*.log", patterns)
+        self.assertNotIn("*.tmp", patterns)
+        self.assertIn("*.dat", patterns)
+        self.assertIn("*.bak", patterns)
+
+    def test_full_layering_append_mode(self):
+        global_r = [DiffRule(type="ignore_line", pattern="^#")]
+        file_r = [DiffRule(type="ignore_file", pattern="*.log")]
+        case_r = [DiffRule(type="ignore_regex", pattern="PID=\\d+", replace="PID=X")]
+        cli_r = [DiffRule(type="ignore_folder", pattern="tmp")]
+        result = resolve_effective_rules(
+            global_r, case_r, "append", file_rules=file_r, cli_rules=cli_r
+        )
+        self.assertEqual(len(result), 4)
+        types = [r.type for r in result]
+        self.assertEqual(types, ["ignore_line", "ignore_file", "ignore_regex", "ignore_folder"])
+
+    def test_no_extra_rules_backward_compatible(self):
+        global_r = [DiffRule(type="ignore_file", pattern="*.log")]
+        case_r = [DiffRule(type="ignore_file", pattern="*.dat")]
+        result_append = resolve_effective_rules(global_r, case_r, "append")
+        self.assertEqual(len(result_append), 2)
+        result_override = resolve_effective_rules(global_r, case_r, "override")
+        self.assertEqual(len(result_override), 1)
+        self.assertEqual(result_override[0].pattern, "*.dat")
+
+
 if __name__ == "__main__":
     unittest.main()
