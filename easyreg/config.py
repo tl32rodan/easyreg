@@ -54,6 +54,19 @@ def load_config(path: str) -> Suite:
         output_dir=data["output_dir"],
         cases=[_parse_case(c) for c in data["cases"]],
         diff_rules=_parse_diff_rules(data.get("diff_rules", [])),
+        ignore_rules_file=data.get("ignore_rules_file"),
         versions=data.get("versions"),
         env=data.get("env"),
     )
+
+
+def load_rules_file(path: str) -> List[DiffRule]:
+    """Load a JSON file containing a list of diff rule objects."""
+    rules_path = Path(path)
+    if not rules_path.exists():
+        raise FileNotFoundError(f"Rules file not found: {path}")
+
+    with open(rules_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    return _parse_diff_rules(data)

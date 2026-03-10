@@ -62,8 +62,8 @@ class _CLITestBase(unittest.TestCase):
 
 class TestRunCommand(_CLITestBase):
 
-    @patch("easyreg.cli.SubprocessRunner")
-    @patch("easyreg.cli.compare_directories")
+    @patch("easyreg.orchestrator.SubprocessRunner")
+    @patch("easyreg.orchestrator.compare_directories")
     def test_run_executes_and_compares(self, mock_compare, mock_runner_cls):
         mock_runner = MagicMock()
         mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
@@ -82,8 +82,8 @@ class TestRunCommand(_CLITestBase):
         self.assertTrue(mock_runner.run.called)
         self.assertTrue(mock_compare.called)
 
-    @patch("easyreg.cli.SubprocessRunner")
-    @patch("easyreg.cli.compare_directories")
+    @patch("easyreg.orchestrator.SubprocessRunner")
+    @patch("easyreg.orchestrator.compare_directories")
     def test_run_returns_1_on_failure(self, mock_compare, mock_runner_cls):
         mock_runner = MagicMock()
         mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
@@ -104,7 +104,7 @@ class TestRunCommand(_CLITestBase):
 
 class TestCompareCommand(_CLITestBase):
 
-    @patch("easyreg.cli.compare_directories")
+    @patch("easyreg.orchestrator.compare_directories")
     def test_compare_does_not_execute(self, mock_compare):
         mock_compare.return_value = MagicMock(match=True, errors=[], diffs=[])
 
@@ -124,7 +124,7 @@ class TestCompareCommand(_CLITestBase):
 
 class TestPromoteCommand(_CLITestBase):
 
-    @patch("easyreg.cli.GoldenManager")
+    @patch("easyreg.orchestrator.GoldenManager")
     def test_promote_calls_golden_manager(self, mock_gm_cls):
         mock_gm = MagicMock()
         mock_gm_cls.return_value = mock_gm
@@ -137,9 +137,9 @@ class TestPromoteCommand(_CLITestBase):
         (output_dir / "result.txt").write_text("output")
 
         cli.main(["promote", "--config", config_path])
-        self.assertTrue(mock_gm.promote.called)
+        self.assertTrue(mock_gm.promote_with_rules.called)
 
-    @patch("easyreg.cli.GoldenManager")
+    @patch("easyreg.orchestrator.GoldenManager")
     def test_promote_specific_case(self, mock_gm_cls):
         mock_gm = MagicMock()
         mock_gm_cls.return_value = mock_gm
@@ -157,7 +157,7 @@ class TestPromoteCommand(_CLITestBase):
         cli.main(["promote", "--config", config_path, "--case", "case_a"])
 
         # Only case_a should be promoted
-        calls = mock_gm.promote.call_args_list
+        calls = mock_gm.promote_with_rules.call_args_list
         promoted_names = [c[0][0] for c in calls]
         self.assertIn("case_a", promoted_names)
         self.assertNotIn("case_b", promoted_names)
@@ -165,8 +165,8 @@ class TestPromoteCommand(_CLITestBase):
 
 class TestCaseFilter(_CLITestBase):
 
-    @patch("easyreg.cli.SubprocessRunner")
-    @patch("easyreg.cli.compare_directories")
+    @patch("easyreg.orchestrator.SubprocessRunner")
+    @patch("easyreg.orchestrator.compare_directories")
     def test_case_filter_runs_only_specified(self, mock_compare, mock_runner_cls):
         mock_runner = MagicMock()
         mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
@@ -191,7 +191,7 @@ class TestCaseFilter(_CLITestBase):
 
 class TestGoldenStatus(_CLITestBase):
 
-    @patch("easyreg.cli.GoldenManager")
+    @patch("easyreg.orchestrator.GoldenManager")
     def test_golden_status(self, mock_gm_cls):
         mock_gm = MagicMock()
         mock_gm.status.return_value = {"case_a": True, "case_b": False}
@@ -224,7 +224,7 @@ class TestCLIErrors(_CLITestBase):
 class TestNewVerdictFlow(_CLITestBase):
     """When golden doesn't exist for a case, verdict should be NEW."""
 
-    @patch("easyreg.cli.SubprocessRunner")
+    @patch("easyreg.orchestrator.SubprocessRunner")
     def test_no_golden_yields_new_verdict(self, mock_runner_cls):
         mock_runner = MagicMock()
         mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
@@ -241,8 +241,8 @@ class TestNewVerdictFlow(_CLITestBase):
 class TestParallelRun(_CLITestBase):
     """Tests for --parallel N flag on the run command."""
 
-    @patch("easyreg.cli.SubprocessRunner")
-    @patch("easyreg.cli.compare_directories")
+    @patch("easyreg.orchestrator.SubprocessRunner")
+    @patch("easyreg.orchestrator.compare_directories")
     def test_parallel_flag_accepted(self, mock_compare, mock_runner_cls):
         """--parallel N should not cause an error."""
         mock_runner = MagicMock()
@@ -266,8 +266,8 @@ class TestParallelRun(_CLITestBase):
         exit_code = cli.main(["run", "--config", config_path, "--parallel", "2"])
         self.assertEqual(exit_code, 0)
 
-    @patch("easyreg.cli.SubprocessRunner")
-    @patch("easyreg.cli.compare_directories")
+    @patch("easyreg.orchestrator.SubprocessRunner")
+    @patch("easyreg.orchestrator.compare_directories")
     def test_parallel_all_cases_executed(self, mock_compare, mock_runner_cls):
         """All cases should be executed even with --parallel."""
         mock_runner = MagicMock()
@@ -292,8 +292,8 @@ class TestParallelRun(_CLITestBase):
 
         self.assertEqual(mock_runner.run.call_count, 2)
 
-    @patch("easyreg.cli.SubprocessRunner")
-    @patch("easyreg.cli.compare_directories")
+    @patch("easyreg.orchestrator.SubprocessRunner")
+    @patch("easyreg.orchestrator.compare_directories")
     def test_parallel_1_same_as_sequential(self, mock_compare, mock_runner_cls):
         """--parallel 1 should behave like sequential execution."""
         mock_runner = MagicMock()
@@ -310,8 +310,8 @@ class TestParallelRun(_CLITestBase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(mock_runner.run.call_count, 1)
 
-    @patch("easyreg.cli.SubprocessRunner")
-    @patch("easyreg.cli.compare_directories")
+    @patch("easyreg.orchestrator.SubprocessRunner")
+    @patch("easyreg.orchestrator.compare_directories")
     def test_parallel_failure_propagates(self, mock_compare, mock_runner_cls):
         """A failing case under --parallel should still return exit code 1."""
         mock_runner = MagicMock()
@@ -333,8 +333,8 @@ class TestParallelRun(_CLITestBase):
 class TestJsonReport(_CLITestBase):
     """Tests for --report-format json flag."""
 
-    @patch("easyreg.cli.SubprocessRunner")
-    @patch("easyreg.cli.compare_directories")
+    @patch("easyreg.orchestrator.SubprocessRunner")
+    @patch("easyreg.orchestrator.compare_directories")
     def test_json_format_flag_accepted(self, mock_compare, mock_runner_cls):
         mock_runner = MagicMock()
         mock_runner.run.return_value = RunResult(returncode=0, stdout="", stderr="")
@@ -355,8 +355,8 @@ class TestJsonReport(_CLITestBase):
         self.assertEqual(exit_code, 0)
         self.assertTrue(os.path.exists(report_path))
 
-    @patch("easyreg.cli.SubprocessRunner")
-    @patch("easyreg.cli.compare_directories")
+    @patch("easyreg.orchestrator.SubprocessRunner")
+    @patch("easyreg.orchestrator.compare_directories")
     def test_json_report_is_valid_json(self, mock_compare, mock_runner_cls):
         import json as _json
         mock_runner = MagicMock()

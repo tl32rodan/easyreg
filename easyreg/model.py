@@ -47,6 +47,7 @@ class Suite:
     output_dir: str
     cases: List[Case]
     diff_rules: List[DiffRule] = field(default_factory=list)
+    ignore_rules_file: Optional[str] = None
     versions: Optional[Dict[str, Dict[str, str]]] = None
     env: Optional[Dict[str, str]] = None
 
